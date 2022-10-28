@@ -84,7 +84,7 @@ impl Individual {
                     self.chromosome[idx] = 1;
                     self.chromosome[idx2] = 0;
                     count += 1;
-                } else if self.chromosome[idx] == 1 && self.chromosome[idx] == 0 {
+                } else if self.chromosome[idx] == 1 && self.chromosome[idx2] == 0 {
                     self.chromosome[idx] = 0;
                     self.chromosome[idx2] = 1;
                     count += 1;
@@ -152,7 +152,7 @@ impl Population {
     fn tournament(&self, rng: &mut dyn RngCore, k: usize) -> Individual {
         let mut tourn: Vec<usize> = vec![];
         let indices: Vec<_> = self.pop.choose_multiple(rng, k).collect();
-        let mut score = 999.9;
+        let mut score = 999999.9;
         let mut best = indices[0];
         for i in &indices {
             if i.fitness < best.fitness {
@@ -210,8 +210,8 @@ impl Population {
             child2.extend(&set_intersect);
             let mut c1_tmp = Vec::from_iter(child1);
             let mut c2_tmp = Vec::from_iter(child2);
-            let mut c1_vec = vec![0; ind1.chromosome.len() ];    
-            let mut c2_vec = vec![0; ind2.chromosome.len() ];    
+            let mut c1_vec = vec![0; ind1.chromosome.len()];
+            let mut c2_vec = vec![0; ind2.chromosome.len()];
             for i in c1_tmp {
                 c1_vec[i] = 1;
             }
@@ -258,9 +258,9 @@ impl Population {
             let mut elite: Individual = self.pop[0].clone();
             for i in 0..self.pop.len() {
                 let mut tmp = 0;
-                for j in 0..10 {
+                for _ in 0..10 {
                     let mut fit = 9999999;
-                    while fit >= 9999 {
+                    while fit >= 999999 {
                         let (_, _, score, _, _, _) = fitness_sirs(
                             &self.pop[i],
                             p0,
@@ -304,6 +304,7 @@ impl Population {
                 children.push(c1);
                 children.push(c2);
             }
+            self.pop = children;
         }
     }
 }
@@ -420,8 +421,8 @@ pub fn fitness_sirs(
             match clr[i] {
                 0 => (),         //susceptible, do nothing
                 1 => clr[i] = 2, //infected, move to removed
-                2 => (), //removed, move to susceptible
-                // 2 => clr[i] = 0, //removed, move to susceptible
+                // 2 => (),         //removed, move to susceptible
+                2 => clr[i] = 0, //removed, move to susceptible
                 3 => {
                     //newly infected
                     clr[i] = 1;
@@ -446,7 +447,8 @@ fn main() {
     let f = File::open(&args.in_file).unwrap();
 
     let (elist, alist) = parse_graph(f);
-    let mut pop = Population::init_pop(0.5, 201, &elist, &alist, args.cross_chance, args.mut_chance);
+    let mut pop =
+        Population::init_pop(0.5, 201, &elist, &alist, args.cross_chance, args.mut_chance);
     pop.evolve(
         100,
         args.p0,
