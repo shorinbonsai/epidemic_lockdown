@@ -1,5 +1,7 @@
 use rand::seq::SliceRandom;
 use rand::Rng;
+use rand::RngCore;
+use std::collections::HashSet;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -8,7 +10,11 @@ use std::io::BufReader;
 #[derive(Debug)]
 struct Arguments {
     in_file: String,
-    p0: u32,
+    p0: usize,
+    cross_chance: f32,
+    mut_chance: f32,
+    shut_percent: f32,
+    reopen_percent: f32,
 }
 
 fn parse_args() -> Arguments {
@@ -17,15 +23,19 @@ fn parse_args() -> Arguments {
     Arguments {
         in_file: args[0].clone(),
         p0: args[1].clone().parse().unwrap(),
+        cross_chance: args[2].parse().unwrap(),
+        mut_chance: args[3].parse().unwrap(),
+        shut_percent: args[4].parse().unwrap(),
+        reopen_percent: args[5].parse().unwrap(),
     }
 }
 fn parse_graph(f: File) -> (Vec<(u32, u32)>, Vec<Vec<u32>>) {
     let mut reader = BufReader::new(f);
     let mut first_line: String = "".to_string();
     let _i = reader.read_line(&mut first_line);
-    first_line = first_line.strip_suffix("\n").unwrap().to_owned();
+    first_line = first_line.strip_suffix('\n').unwrap().to_owned();
     let split_first = first_line
-        .split(" ")
+        .split(' ')
         .map(|x| x.parse::<u32>().unwrap())
         .collect::<Vec<_>>();
     println!("{:?}", split_first);
@@ -34,10 +44,10 @@ fn parse_graph(f: File) -> (Vec<(u32, u32)>, Vec<Vec<u32>>) {
     let mut edg_list: Vec<(u32, u32)> = vec![];
     for line_ in reader.lines().enumerate() {
         let line = line_.1.unwrap();
-        let line: Vec<u32> = line.split(" ").map(|x| x.parse::<u32>().unwrap()).collect();
+        let line: Vec<u32> = line.split(' ').map(|x| x.parse::<u32>().unwrap()).collect();
 
         let idx = line_.0;
-        if line.len() > 0 {
+        if !line.is_empty() {
             adj_list.push(vec![]);
             for numb in &line {
                 adj_list[idx].push(*numb);
@@ -46,29 +56,50 @@ fn parse_graph(f: File) -> (Vec<(u32, u32)>, Vec<Vec<u32>>) {
                 }
             }
         }
-        // println!("{:?}", line);
-        // println!("{:?}", idx);
     }
-    // println!("{:?}", adj_list);
-    // println!("{:?}", edg_list);
     (edg_list, adj_list)
 }
 
 #[derive(Clone, Debug)]
-struct Individual {
-    chromosome: Vec<u32>,
-    fitness: u32,
+pub struct Individual {
+    chromosome: Vec<usize>,
+    fitness: f32,
     lockdown_edgelist: Vec<(u32, u32)>,
     lockdown_adjlist: Vec<Vec<u32>>,
+    adjlist: Vec<Vec<u32>>,
+    mut_chance: f32,
 }
 
 impl Individual {
     fn new() -> Self {
         todo!()
     }
+    fn mutate(&mut self, rng: &mut dyn RngCore, chance_mut: f32) {
+        if rng.gen::<f32>() < chance_mut {
+            let mut count = 0;
+            while count < 2 {
+                let idx = rng.gen_range(0..self.chromosome.len());
+                let idx2 = rng.gen_range(0..self.chromosome.len());
+                if self.chromosome[idx] == 0 && self.chromosome[idx2] == 1 {
+                    self.chromosome[idx] = 1;
+                    self.chromosome[idx2] = 0;
+                    count += 1;
+                } else if self.chromosome[idx] == 1 && self.chromosome[idx] == 0 {
+                    self.chromosome[idx] = 0;
+                    self.chromosome[idx2] = 1;
+                    count += 1;
+                }
+            }
+        }
+    }
 }
-struct Population {
+
+#[derive(Clone, Debug)]
+pub struct Population {
     pop: Vec<Individual>,
+    cross_chance: f32,
+    edg_list: Vec<(u32, u32)>,
+    adj_list: Vec<Vec<u32>>,
 }
 
 impl Population {
@@ -77,17 +108,21 @@ impl Population {
         pop_size: i32,
         edg_list: &Vec<(u32, u32)>,
         adj_list: &Vec<Vec<u32>>,
+        cross_chance: f32,
+        mut_chance: f32,
     ) -> Self {
         let edg_count = edg_list.len();
         let mut pop_vec: Vec<Individual> = Vec::with_capacity(pop_size as usize);
         let num_remove = (percent_lock * edg_count as f32) as usize;
+        // let mod_rem = num_remove % 2;
+        // let num_remove = num_remove - mod_rem;
         let mut init_list = vec![0; edg_count];
         for (i, v) in init_list.iter_mut().enumerate() {
             *v = i as u32;
         }
         let mut rng = &mut rand::thread_rng();
         for _ in 0..pop_size {
-            let mut new_list: Vec<u32> = vec![1; edg_count];
+            let mut new_list: Vec<usize> = vec![1; edg_count];
             let rindices: Vec<u32> = init_list
                 .choose_multiple(&mut rng, num_remove)
                 .cloned()
@@ -98,21 +133,187 @@ impl Population {
             let (ladjlist, ledgelist) = get_lockdown_graphs(adj_list, edg_list, &new_list);
             let new_ind = Individual {
                 chromosome: new_list,
-                fitness: 0,
+                fitness: 0.0,
                 lockdown_edgelist: ledgelist,
                 lockdown_adjlist: ladjlist,
+                adjlist: adj_list.clone(),
+                mut_chance: mut_chance,
             };
             pop_vec.push(new_ind);
         }
-        let newpop = Population { pop: pop_vec };
-        newpop
+        Population {
+            pop: pop_vec,
+            cross_chance: cross_chance,
+            edg_list: edg_list.clone(),
+            adj_list: adj_list.clone(),
+        }
+    }
+
+    fn tournament(&self, rng: &mut dyn RngCore, k: usize) -> Individual {
+        let mut tourn: Vec<usize> = vec![];
+        let indices: Vec<_> = self.pop.choose_multiple(rng, k).collect();
+        let mut score = 999.9;
+        let mut best = indices[0];
+        for i in &indices {
+            if i.fitness < best.fitness {
+                best = i;
+            }
+        }
+        best.clone()
+    }
+
+    fn sdb(
+        ind1: &Individual,
+        ind2: &Individual,
+        cross_chance: f32,
+        rng: &mut dyn RngCore,
+        edg_list: &Vec<(u32, u32)>,
+        adj_list: &Vec<Vec<u32>>,
+    ) -> (Individual, Individual) {
+        let chance = rng.gen::<f32>();
+        if chance < cross_chance {
+            let mut ind1_set: HashSet<usize> = HashSet::new();
+            let mut ind2_set: HashSet<usize> = HashSet::new();
+            let mut set_intersect = HashSet::new();
+            let mut intersect = vec![];
+            let mut ind1_ones: Vec<usize> = vec![];
+            let mut ind2_ones: Vec<usize> = vec![];
+            for (idx, value) in ind1.chromosome.iter().enumerate() {
+                if *value == 1 && ind2.chromosome[idx] == 1 {
+                    intersect.push(idx);
+                    set_intersect.insert(idx);
+                } else if *value == 1 {
+                    ind1_ones.push(idx);
+                    ind1_set.insert(idx);
+                }
+            }
+            for (idx, value) in ind2.chromosome.iter().enumerate() {
+                if *value == 1 && !intersect.contains(&idx) {
+                    ind2_ones.push(idx);
+                    ind2_set.insert(idx);
+                }
+            }
+            let extra_ones: HashSet<_> = ind1_set.union(&ind2_set).collect();
+            let mut child1 = HashSet::new();
+            let mut child2 = HashSet::new();
+            let mut switch = false;
+            for i in extra_ones {
+                if switch {
+                    child1.insert(*i);
+                    switch = false;
+                } else {
+                    child2.insert(*i);
+                    switch = true;
+                }
+            }
+            child1.extend(&set_intersect);
+            child2.extend(&set_intersect);
+            let mut c1_vec = Vec::from_iter(child1);
+            let mut c2_vec = Vec::from_iter(child2);
+            // for i in 0..edg_list.len() {
+            //     if child1.contains(&i) {
+            //         c1_vec.push(1);
+            //     } else {
+            //         c1_vec.push(0);
+            //     }
+            //     if child2.contains(&i) {
+            //         c2_vec.push(1);
+            //     }
+            // }
+            let (c1_adj, c1_edg) = get_lockdown_graphs(&adj_list, &edg_list, &c1_vec);
+            let (c2_adj, c2_edg) = get_lockdown_graphs(&adj_list, &edg_list, &c2_vec);
+            let c1 = Individual {
+                chromosome: c1_vec,
+                fitness: 0.0,
+                lockdown_edgelist: c1_edg,
+                lockdown_adjlist: c1_adj,
+                adjlist: adj_list.clone(),
+                mut_chance: ind1.mut_chance,
+            };
+            let c2 = Individual {
+                chromosome: c2_vec,
+                fitness: 0.0,
+                lockdown_edgelist: c2_edg,
+                lockdown_adjlist: c2_adj,
+                adjlist: adj_list.clone(),
+                mut_chance: ind1.mut_chance,
+            };
+            return (c1, c2);
+        }
+        return (ind1.clone(), ind2.clone());
+    }
+
+    fn evolve(
+        &mut self,
+        max_gen: u32,
+        p0: usize,
+        alpha: f64,
+        node_num: usize,
+        shutdown_percent: f32,
+        reopen_percent: f32,
+        k: usize,
+        rng: &mut dyn RngCore,
+    ) {
+        let mut file = File::create("results.txt").expect("create failed");
+        for gen in 0..=max_gen {
+            let mut scores = vec![];
+            let mut elite: Individual = self.pop[0].clone();
+            for i in 0..self.pop.len() {
+                let mut tmp = 0;
+                for j in 0..10 {
+                    let mut fit = 99999;
+                    while fit >= 9999 {
+                        let (_, _, score, _, _, _) = fitness_sirs(
+                            &self.pop[i],
+                            p0,
+                            alpha,
+                            node_num,
+                            shutdown_percent,
+                            reopen_percent,
+                        );
+                        if score >= 5 {
+                            tmp = tmp + score;
+                            fit = score;
+                        }
+                    }
+                }
+                let fitness: f32 = tmp as f32 / 10.0;
+                scores.push(fitness);
+                self.pop[i].fitness = fitness;
+                if fitness < elite.fitness {
+                    elite = self.pop[i].clone();
+                }
+            }
+            let meany: f32 = scores.iter().sum::<f32>() / scores.len() as f32;
+            println!("Gen: {gen}, Best: {}, Mean: {}", elite.fitness, meany);
+            let result = format!("Gen: {gen}, Best: {}, Mean: {}", elite.fitness, meany);
+            writeln!(file, "{}", result).expect("write failed");
+            let mut children: Vec<Individual> = vec![];
+            children.push(elite);
+            while children.len() < self.pop.len() {
+                let p1 = self.tournament(rng, k);
+                let p2 = self.tournament(rng, k);
+                let (mut c1, mut c2) = Population::sdb(
+                    &p1,
+                    &p2,
+                    self.cross_chance,
+                    rng,
+                    &self.edg_list,
+                    &self.adj_list,
+                );
+                c1.mutate(rng, c1.mut_chance);
+                c2.mutate(rng, c2.mut_chance);
+                children.push(c1);
+                children.push(c2);
+            }
+        }
     }
 }
 
 fn get_lockdown_graphs(
     adj_list: &Vec<Vec<u32>>,
     edg_list: &Vec<(u32, u32)>,
-    remove_list: &Vec<u32>,
+    remove_list: &Vec<usize>,
 ) -> (Vec<Vec<u32>>, Vec<(u32, u32)>) {
     let mut lock_adj: Vec<Vec<u32>> = adj_list.clone();
     let mut lock_edg: Vec<(u32, u32)> = edg_list.clone();
@@ -136,8 +337,8 @@ fn get_lockdown_graphs(
     (lock_adj, lock_edg)
 }
 
-pub fn set_colour(value: u32, node_num: usize) -> [u32; node_num] {
-    let clr: [u32; VERTICES] = [value; VERTICES];
+pub fn set_colour(value: u32, node_num: usize) -> Vec<u32> {
+    let clr = vec![value; node_num];
     clr
 }
 
@@ -152,33 +353,63 @@ pub fn infected(n: u32, alpha: f64) -> u32 {
     }
 }
 
-pub fn SIR(&self, p0: usize, alpha: f64, node_num: usize) -> (u32, u32, u32) {
+pub fn fitness_sirs(
+    individual: &Individual,
+    p0: usize,
+    alpha: f64,
+    node_num: usize,
+    shutdown_percent: f32,
+    reopen_percent: f32,
+) -> (u32, u32, u32, u32, u32, Vec<Vec<usize>>) {
     if p0 >= node_num {
-        return (0, 0, 0);
+        return (0, 0, 0, 0, 0, vec![vec![0]]);
     }
     let mut max = 0;
     let mut len = 0;
     let mut ttl = 0;
+    let mut have_locked_down = false;
+    let mut have_reopened = false;
+    let mut reopen_step = 128;
+    let mut time_step = 0;
+    let mut lockdown_step = 0;
+    let mut epi_log: Vec<Vec<usize>> = Vec::new();
+    epi_log.push(vec![p0]);
     let mut nin: Vec<u32> = vec![0; node_num]; //infected neibours counters
     let mut clr: Vec<u32> = vec![0; node_num]; // set population to susceptible
     clr[p0] = 1; //infect patient zero
     let mut numb_inf = 1; // initialize to one person currently infected
-    while numb_inf > 0 {
-        for i in 0..VERTICES {
+    let mut tmp_list = &individual.adjlist;
+    while numb_inf > 0 && time_step < node_num as u32 {
+        let mut current_infected = numb_inf as f32 / node_num as f32;
+        if (current_infected >= shutdown_percent) && !have_locked_down {
+            tmp_list = &individual.lockdown_adjlist;
+            have_locked_down = true;
+            lockdown_step = time_step;
+        }
+        for i in 0..node_num {
             nin[i] = 0; //zero the number of infected neighbors buffer
         }
-        for i in 0..VERTICES {
+        //if threshold met then restore initial contact graph
+        // current_infected = numb_inf as f32 / node_num as f32;
+
+        if (current_infected < reopen_percent) && have_locked_down && !have_reopened {
+            tmp_list = &individual.adjlist;
+            reopen_step = time_step;
+            have_reopened = true;
+        }
+
+        for i in 0..node_num {
             if clr[i] == 1 {
                 //found infected individual
-                for j in 0..self.adj_list[i].len() {
-                    nin[self.adj_list[i][j]] += 1; //record exposure
+                for j in 0..tmp_list[i].len() {
+                    nin[tmp_list[i][j] as usize] += 1; //record exposure
                 }
             }
         }
         //check for transmission
-        for i in 0..VERTICES {
+        for i in 0..node_num {
             if clr[i] == 0 && nin[i] > 0 {
-                clr[i] = 3 * Unweighted::infected(nin[i], alpha);
+                clr[i] = 3 * infected(nin[i], alpha);
             }
         }
         if numb_inf > max {
@@ -186,31 +417,47 @@ pub fn SIR(&self, p0: usize, alpha: f64, node_num: usize) -> (u32, u32, u32) {
         }
         ttl += numb_inf;
         numb_inf = 0;
-        for i in 0..VERTICES {
+        let mut curr_epi = vec![];
+        for i in 0..node_num {
             match clr[i] {
                 0 => (),         //susceptible, do nothing
                 1 => clr[i] = 2, //infected, move to removed
-                2 => (),         //removed, do nothing
+                2 => clr[i] = 0, //removed, move to susceptible
                 3 => {
                     //newly infected
                     clr[i] = 1;
                     numb_inf += 1;
+                    curr_epi.push(i);
                 }
                 _ => (),
             }
         }
+        epi_log.push(curr_epi);
+        time_step += 1;
         len += 1; //record time step
     }
-    (max, len, ttl)
+    (max, len, ttl, lockdown_step, reopen_step, epi_log)
 }
 
 fn main() {
+    static ALPHA: f64 = 0.3;
+    let mut rng = rand::thread_rng();
     let args = parse_args();
     println!("{}", args.p0);
     let f = File::open(&args.in_file).unwrap();
 
     let (elist, alist) = parse_graph(f);
-    let pop = Population::init_pop(0.5, 201, &elist, &alist);
+    let mut pop = Population::init_pop(0.5, 21, &elist, &alist, args.cross_chance, args.mut_chance);
+    pop.evolve(
+        100,
+        args.p0,
+        ALPHA,
+        alist.len(),
+        args.shut_percent,
+        args.reopen_percent,
+        7,
+        &mut rng,
+    );
 
     println!("{:?}", pop.pop[4]);
     println!("{:?}", alist);
