@@ -64,16 +64,13 @@ fn parse_graph(f: File) -> (Vec<(u32, u32)>, Vec<Vec<u32>>) {
 pub struct Individual {
     chromosome: Vec<usize>,
     fitness: f32,
-    lockdown_edgelist: Vec<(u32, u32)>,
+    // lockdown_edgelist: Vec<(u32, u32)>,
     lockdown_adjlist: Vec<Vec<u32>>,
     adjlist: Vec<Vec<u32>>,
     mut_chance: f32,
 }
 
 impl Individual {
-    fn new() -> Self {
-        todo!()
-    }
     fn mutate(&mut self, rng: &mut dyn RngCore, chance_mut: f32) {
         if rng.gen::<f32>() < chance_mut {
             let mut count = 0;
@@ -107,7 +104,7 @@ impl Population {
         percent_lock: f32,
         pop_size: i32,
         edg_list: &Vec<(u32, u32)>,
-        adj_list: &Vec<Vec<u32>>,
+        adj_list: &[Vec<u32>],
         cross_chance: f32,
         mut_chance: f32,
     ) -> Self {
@@ -130,13 +127,13 @@ impl Population {
             for j in &rindices {
                 new_list[*j as usize] = 0;
             }
-            let (ladjlist, ledgelist) = get_lockdown_graphs(adj_list, edg_list, &new_list);
+            let (ladjlist, _ledgelist) = get_lockdown_graphs(adj_list, edg_list, &new_list);
             let new_ind = Individual {
                 chromosome: new_list,
                 fitness: 999999.0,
-                lockdown_edgelist: ledgelist,
+                // lockdown_edgelist: ledgelist,
                 lockdown_adjlist: ladjlist,
-                adjlist: adj_list.clone(),
+                adjlist: adj_list.to_owned(),
                 mut_chance: mut_chance,
             };
             pop_vec.push(new_ind);
@@ -145,14 +142,12 @@ impl Population {
             pop: pop_vec,
             cross_chance: cross_chance,
             edg_list: edg_list.clone(),
-            adj_list: adj_list.clone(),
+            adj_list: adj_list.to_owned(),
         }
     }
 
     fn tournament(&self, rng: &mut dyn RngCore, k: usize) -> Individual {
-        let mut tourn: Vec<usize> = vec![];
         let indices: Vec<_> = self.pop.choose_multiple(rng, k).collect();
-        let mut score = 999999.9;
         let mut best = indices[0];
         for i in &indices {
             if i.fitness < best.fitness {
@@ -167,8 +162,8 @@ impl Population {
         ind2: &Individual,
         cross_chance: f32,
         rng: &mut dyn RngCore,
-        edg_list: &Vec<(u32, u32)>,
-        adj_list: &Vec<Vec<u32>>,
+        edg_list: &[(u32, u32)],
+        adj_list: &[Vec<u32>],
     ) -> (Individual, Individual) {
         let chance = rng.gen::<f32>();
         if chance < cross_chance {
@@ -208,8 +203,8 @@ impl Population {
             }
             child1.extend(&set_intersect);
             child2.extend(&set_intersect);
-            let mut c1_tmp = Vec::from_iter(child1);
-            let mut c2_tmp = Vec::from_iter(child2);
+            let c1_tmp = Vec::from_iter(child1);
+            let c2_tmp = Vec::from_iter(child2);
             let mut c1_vec = vec![0; ind1.chromosome.len()];
             let mut c2_vec = vec![0; ind2.chromosome.len()];
             for i in c1_tmp {
@@ -218,22 +213,22 @@ impl Population {
             for i in c2_tmp {
                 c2_vec[i] = 1;
             }
-            let (c1_adj, c1_edg) = get_lockdown_graphs(&adj_list, &edg_list, &c1_vec);
-            let (c2_adj, c2_edg) = get_lockdown_graphs(&adj_list, &edg_list, &c2_vec);
+            let (c1_adj, _c1_edg) = get_lockdown_graphs(adj_list, edg_list, &c1_vec);
+            let (c2_adj, _c2_edg) = get_lockdown_graphs(adj_list, edg_list, &c2_vec);
             let c1 = Individual {
                 chromosome: c1_vec,
                 fitness: 999999.0,
-                lockdown_edgelist: c1_edg,
+                // lockdown_edgelist: c1_edg,
                 lockdown_adjlist: c1_adj,
-                adjlist: adj_list.clone(),
+                adjlist: adj_list.to_owned(),
                 mut_chance: ind1.mut_chance,
             };
             let c2 = Individual {
                 chromosome: c2_vec,
                 fitness: 999999.0,
-                lockdown_edgelist: c2_edg,
+                // lockdown_edgelist: c2_edg,
                 lockdown_adjlist: c2_adj,
-                adjlist: adj_list.clone(),
+                adjlist: adj_list.to_owned(),
                 mut_chance: ind1.mut_chance,
             };
             return (c1, c2);
@@ -270,7 +265,7 @@ impl Population {
                             reopen_percent,
                         );
                         if score >= 5 {
-                            tmp = tmp + score;
+                            tmp += score;
                             fit = score;
                         }
                     }
@@ -310,12 +305,12 @@ impl Population {
 }
 
 fn get_lockdown_graphs(
-    adj_list: &Vec<Vec<u32>>,
-    edg_list: &Vec<(u32, u32)>,
-    remove_list: &Vec<usize>,
+    adj_list: &[Vec<u32>],
+    edg_list: &[(u32, u32)],
+    remove_list: &[usize],
 ) -> (Vec<Vec<u32>>, Vec<(u32, u32)>) {
-    let mut lock_adj: Vec<Vec<u32>> = adj_list.clone();
-    let mut lock_edg: Vec<(u32, u32)> = edg_list.clone();
+    let mut lock_adj: Vec<Vec<u32>> = adj_list.to_owned();
+    let mut lock_edg: Vec<(u32, u32)> = edg_list.to_owned();
     let mut removeylist: Vec<usize> = vec![];
     for (idx, edge) in remove_list.iter().enumerate() {
         if *edge == 0 {
@@ -330,9 +325,9 @@ fn get_lockdown_graphs(
             removeylist.push(idx);
         }
     }
-    for x in removeylist.iter().rev() {
-        lock_edg.remove(*x);
-    }
+    // for x in removeylist.iter().rev() {
+    //     lock_edg.remove(*x);
+    // }
     (lock_adj, lock_edg)
 }
 
@@ -379,14 +374,14 @@ pub fn fitness_sirs(
     let mut numb_inf = 1; // initialize to one person currently infected
     let mut tmp_list = &individual.adjlist;
     while numb_inf > 0 && time_step < node_num as u32 {
-        let mut current_infected = numb_inf as f32 / node_num as f32;
+        let current_infected = numb_inf as f32 / node_num as f32;
         if (current_infected >= shutdown_percent) && !have_locked_down {
             tmp_list = &individual.lockdown_adjlist;
             have_locked_down = true;
             lockdown_step = time_step;
         }
-        for i in 0..node_num {
-            nin[i] = 0; //zero the number of infected neighbors buffer
+        for i in nin.iter_mut().take(node_num) {
+            *i = 0; //zero the number of infected neighbors buffer
         }
         //if threshold met then restore initial contact graph
         // current_infected = numb_inf as f32 / node_num as f32;
