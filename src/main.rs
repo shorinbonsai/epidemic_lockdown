@@ -133,7 +133,7 @@ impl Population {
             let (ladjlist, ledgelist) = get_lockdown_graphs(adj_list, edg_list, &new_list);
             let new_ind = Individual {
                 chromosome: new_list,
-                fitness: 0.0,
+                fitness: 999999.0,
                 lockdown_edgelist: ledgelist,
                 lockdown_adjlist: ladjlist,
                 adjlist: adj_list.clone(),
@@ -208,23 +208,21 @@ impl Population {
             }
             child1.extend(&set_intersect);
             child2.extend(&set_intersect);
-            let mut c1_vec = Vec::from_iter(child1);
-            let mut c2_vec = Vec::from_iter(child2);
-            // for i in 0..edg_list.len() {
-            //     if child1.contains(&i) {
-            //         c1_vec.push(1);
-            //     } else {
-            //         c1_vec.push(0);
-            //     }
-            //     if child2.contains(&i) {
-            //         c2_vec.push(1);
-            //     }
-            // }
+            let mut c1_tmp = Vec::from_iter(child1);
+            let mut c2_tmp = Vec::from_iter(child2);
+            let mut c1_vec = vec![0; ind1.chromosome.len() ];    
+            let mut c2_vec = vec![0; ind2.chromosome.len() ];    
+            for i in c1_tmp {
+                c1_vec[i] = 1;
+            }
+            for i in c2_tmp {
+                c2_vec[i] = 1;
+            }
             let (c1_adj, c1_edg) = get_lockdown_graphs(&adj_list, &edg_list, &c1_vec);
             let (c2_adj, c2_edg) = get_lockdown_graphs(&adj_list, &edg_list, &c2_vec);
             let c1 = Individual {
                 chromosome: c1_vec,
-                fitness: 0.0,
+                fitness: 999999.0,
                 lockdown_edgelist: c1_edg,
                 lockdown_adjlist: c1_adj,
                 adjlist: adj_list.clone(),
@@ -232,7 +230,7 @@ impl Population {
             };
             let c2 = Individual {
                 chromosome: c2_vec,
-                fitness: 0.0,
+                fitness: 999999.0,
                 lockdown_edgelist: c2_edg,
                 lockdown_adjlist: c2_adj,
                 adjlist: adj_list.clone(),
@@ -261,7 +259,7 @@ impl Population {
             for i in 0..self.pop.len() {
                 let mut tmp = 0;
                 for j in 0..10 {
-                    let mut fit = 99999;
+                    let mut fit = 9999999;
                     while fit >= 9999 {
                         let (_, _, score, _, _, _) = fitness_sirs(
                             &self.pop[i],
@@ -422,7 +420,8 @@ pub fn fitness_sirs(
             match clr[i] {
                 0 => (),         //susceptible, do nothing
                 1 => clr[i] = 2, //infected, move to removed
-                2 => clr[i] = 0, //removed, move to susceptible
+                2 => (), //removed, move to susceptible
+                // 2 => clr[i] = 0, //removed, move to susceptible
                 3 => {
                     //newly infected
                     clr[i] = 1;
@@ -447,7 +446,7 @@ fn main() {
     let f = File::open(&args.in_file).unwrap();
 
     let (elist, alist) = parse_graph(f);
-    let mut pop = Population::init_pop(0.5, 21, &elist, &alist, args.cross_chance, args.mut_chance);
+    let mut pop = Population::init_pop(0.5, 201, &elist, &alist, args.cross_chance, args.mut_chance);
     pop.evolve(
         100,
         args.p0,
@@ -459,7 +458,7 @@ fn main() {
         &mut rng,
     );
 
-    println!("{:?}", pop.pop[4]);
-    println!("{:?}", alist);
+    // println!("{:?}", pop.pop[4]);
+    // println!("{:?}", alist);
     // println!("{:?}", elist);
 }

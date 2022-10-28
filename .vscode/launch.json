@@ -19,14 +19,12 @@
                     "kind": "bin"
                 }
             },
-            "args": [
-                "256N_graph0.dat",
+            "args": ["256N_graph0.dat",
                 "4",
                 "0.8",
                 "0.2",
                 "0.1",
-                "0.05"
-            ],
+                "0.05"],
             "cwd": "${workspaceFolder}"
         },
         {
