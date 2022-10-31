@@ -1,3 +1,4 @@
+use inline_python::python;
 use rand::seq::SliceRandom;
 use rand::Rng;
 use rand::RngCore;
@@ -97,6 +98,8 @@ pub struct Population {
     cross_chance: f32,
     edg_list: Vec<(u32, u32)>,
     adj_list: Vec<Vec<u32>>,
+    elitey: Individual,
+    p0: usize,
 }
 
 impl Population {
@@ -107,6 +110,7 @@ impl Population {
         adj_list: &[Vec<u32>],
         cross_chance: f32,
         mut_chance: f32,
+        p0: usize,
     ) -> Self {
         let edg_count = edg_list.len();
         let mut pop_vec: Vec<Individual> = Vec::with_capacity(pop_size as usize);
@@ -139,10 +143,12 @@ impl Population {
             pop_vec.push(new_ind);
         }
         Population {
-            pop: pop_vec,
+            pop: pop_vec.clone(),
             cross_chance: cross_chance,
             edg_list: edg_list.clone(),
             adj_list: adj_list.to_owned(),
+            elitey: pop_vec[0].clone(),
+            p0: p0,
         }
     }
 
@@ -282,7 +288,8 @@ impl Population {
             let result = format!("Gen: {gen}, Best: {}, Mean: {}", elite.fitness, meany);
             writeln!(file, "{}", result).expect("write failed");
             let mut children: Vec<Individual> = vec![];
-            children.push(elite);
+            children.push(elite.clone());
+            self.elitey = elite;
             while children.len() < self.pop.len() {
                 let p1 = self.tournament(rng, k);
                 let p2 = self.tournament(rng, k);
@@ -302,6 +309,87 @@ impl Population {
             self.pop = children;
         }
     }
+
+    fn run_epis(&self, shut_per: f32, re_per: f32) {
+        let epi_total = 50;
+        let mut epi_logs: Vec<Vec<usize>> = vec![];
+        let mut lengths: Vec<usize> = vec![];
+        let mut sums = vec![0; self.elitey.adjlist.len()];
+        let mut counts = vec![0; self.elitey.adjlist.len()];
+        let mut totals: Vec<u32> = vec![];
+        let mut stops: Vec<u32> = vec![];
+        let mut reopens: Vec<u32> = vec![];
+        for _ in 0..epi_total {
+            let (max, len, ttl, lock_step, re_step, epi_log) = fitness_sirs(
+                &self.elitey,
+                self.p0,
+                0.3,
+                self.elitey.adjlist.len(),
+                shut_per,
+                re_per,
+            );
+            lengths.push(len as usize);
+            let new_epi_log: Vec<usize> = epi_log.iter().map(|x| x.len()).collect();
+            // println!("{:?}", &new_epi_log);
+            epi_logs.push(new_epi_log);
+            stops.push(lock_step);
+            totals.push(ttl);
+            reopens.push(re_step);
+        }
+        let avg_total: f32 = totals.iter().sum::<u32>() as f32 / totals.len() as f32;
+        for (ln, el) in epi_logs.iter().enumerate() {
+            for day in 0..(lengths[ln]) {
+                sums[day] += el[day];
+                counts[day] += 1;
+            }
+        }
+        let mut avg = vec![];
+        let mut avg_all: Vec<f32> = vec![];
+        for (day, s) in sums.iter().enumerate() {
+            if counts[day] > 0 {
+                avg.push(s / counts[day]);
+                avg_all.push((s / epi_total) as f32);
+            }
+        }
+        avg.push(0);
+        avg_all.push(0.0);
+        let max_len = *lengths.iter().max().unwrap();
+        // for mut el in &mut epi_logs {
+        //     let s_len = el.len();
+        //     for _ in 0..(max_len - s_len) {
+        //         el.push(0);
+        //     }
+        // }
+        let x: Vec<usize> = (0..=max_len).collect();
+        let mut x_lbls: Vec<_> = x.clone().iter().map(|x| x.to_string()).collect();
+        python! {
+            import matplotlib.pyplot as plt
+            import matplotlib.pyplot
+            print("testy1")
+            fig = matplotlib.pyplot.figure()
+            print("testy2")
+            fig.set_dpi(400)
+            fig.set_figheight(4)
+            plot = fig.add_subplot(111)
+            // for el in 'epi_logs:
+            //     if len(el) > 5:
+            //         plot.plot('x, el, linewidth=1, alpha=0.3, color="gray")
+            print("Test1")
+            plot.plot('x, 'avg, label="Average of Running")
+            plot.plot('x, 'avg_all, label="Average of All")
+            print("Test2")
+            fig.suptitle("Epidemic Profiles for 50 Epidemics")
+            plot.set_ylabel("Newly Infected Individuals")
+            plot.set_xlabel("Day \n DATA: Avg Infected: " + str('avg_total))
+            plot.set_xticks('x)
+            plot.set_xticklabels('x_lbls)
+            plot.legend()
+            fig.tight_layout()
+            // plot.imshow()
+            fig.savefig("test_epi_fig.png")
+
+        }
+    }
 }
 
 fn get_lockdown_graphs(
@@ -310,7 +398,7 @@ fn get_lockdown_graphs(
     remove_list: &[usize],
 ) -> (Vec<Vec<u32>>, Vec<(u32, u32)>) {
     let mut lock_adj: Vec<Vec<u32>> = adj_list.to_owned();
-    let mut lock_edg: Vec<(u32, u32)> = edg_list.to_owned();
+    let lock_edg: Vec<(u32, u32)> = edg_list.to_owned();
     let mut removeylist: Vec<usize> = vec![];
     for (idx, edge) in remove_list.iter().enumerate() {
         if *edge == 0 {
@@ -363,7 +451,7 @@ pub fn fitness_sirs(
     let mut ttl = 0;
     let mut have_locked_down = false;
     let mut have_reopened = false;
-    let mut reopen_step = 128;
+    let mut reopen_step = 9999;
     let mut time_step = 0;
     let mut lockdown_step = 0;
     let mut epi_log: Vec<Vec<usize>> = Vec::new();
@@ -442,8 +530,15 @@ fn main() {
     let f = File::open(&args.in_file).unwrap();
 
     let (elist, alist) = parse_graph(f);
-    let mut pop =
-        Population::init_pop(0.5, 201, &elist, &alist, args.cross_chance, args.mut_chance);
+    let mut pop = Population::init_pop(
+        0.7,
+        201,
+        &elist,
+        &alist,
+        args.cross_chance,
+        args.mut_chance,
+        args.p0,
+    );
     pop.evolve(
         100,
         args.p0,
@@ -454,6 +549,7 @@ fn main() {
         7,
         &mut rng,
     );
+    pop.run_epis(args.shut_percent, args.reopen_percent);
 
     // println!("{:?}", pop.pop[4]);
     // println!("{:?}", alist);
