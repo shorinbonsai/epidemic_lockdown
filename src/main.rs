@@ -19,6 +19,7 @@ struct Arguments {
     mut_chance: f32,
     shut_percent: f32,
     reopen_percent: f32,
+    per_lock: f32,
 }
 
 fn parse_args() -> Arguments {
@@ -31,6 +32,7 @@ fn parse_args() -> Arguments {
         mut_chance: args[3].parse().unwrap(),
         shut_percent: args[4].parse().unwrap(),
         reopen_percent: args[5].parse().unwrap(),
+        per_lock: args[6].parse().unwrap(),
     }
 }
 fn parse_graph(f: File) -> (Vec<(u32, u32)>, Vec<Vec<u32>>) {
@@ -255,8 +257,10 @@ impl Population {
         reopen_percent: f32,
         k: usize,
         rng: &mut dyn RngCore,
+        count: usize,
     ) {
-        let mut file = File::create("results.txt").expect("create failed");
+        let file_name = format!("results{}.txt", count);
+        let mut file = File::create(file_name).expect("create failed");
         for gen in 0..=max_gen {
             let mut scores = vec![];
             let mut elite: Individual = self.pop[0].clone();
@@ -313,7 +317,7 @@ impl Population {
         }
     }
 
-    fn run_epis(&self, shut_per: f32, re_per: f32) {
+    fn run_epis(&self, shut_per: f32, re_per: f32, count: usize) {
         let epi_total = 50;
         let mut epi_logs: Vec<Vec<usize>> = vec![];
         let mut lengths: Vec<usize> = vec![];
@@ -375,7 +379,8 @@ impl Population {
         plot.add_trace(trace1);
         plot.add_trace(trace2);
         plot.show_image(ImageFormat::PNG, 1280, 900);
-        plot.write_image("plotplot.png", ImageFormat::PNG, 1280, 900, 1.0);
+        let plot_name = format!("epi_plot{}.png", count);
+        plot.write_image(plot_name, ImageFormat::PNG, 1280, 900, 1.0);
 
         // python! {
         //     import matplotlib.pyplot as plt
@@ -527,7 +532,7 @@ pub fn fitness_sirs(
                     numb_inf += 1;
                     curr_epi.push(i);
                 }
-                4 => clr[i] = 5, //removed, move to susceptible
+                4 => clr[i] = 5, //removed, move to removed3
                 5 => clr[i] = 0, //removed, move to susceptible
                 _ => (),
             }
@@ -547,38 +552,43 @@ fn main() -> std::io::Result<()> {
     let f = File::open(&args.in_file).unwrap();
 
     let (elist, alist) = parse_graph(f);
-    let mut pop = Population::init_pop(
-        0.7,
-        101,
-        &elist,
-        &alist,
-        args.cross_chance,
-        args.mut_chance,
-        args.p0,
-    );
-    pop.evolve(
-        10,
-        args.p0,
-        ALPHA,
-        alist.len(),
-        args.shut_percent,
-        args.reopen_percent,
-        7,
-        &mut rng,
-    );
-    pop.run_epis(args.shut_percent, args.reopen_percent);
-    let (elite_adj, elite_edj) =
-        get_lockdown_graphs(&pop.adj_list, &pop.edg_list, &pop.elitey.chromosome);
+    for i in 0..30 {
+        let mut pop = Population::init_pop(
+            args.per_lock,
+            201,
+            &elist,
+            &alist,
+            args.cross_chance,
+            args.mut_chance,
+            args.p0,
+        );
+        pop.evolve(
+            100,
+            args.p0,
+            ALPHA,
+            alist.len(),
+            args.shut_percent,
+            args.reopen_percent,
+            7,
+            &mut rng,
+            i,
+        );
+        pop.run_epis(args.shut_percent, args.reopen_percent, i);
+        let (elite_adj, elite_edj) =
+            get_lockdown_graphs(&pop.adj_list, &pop.edg_list, &pop.elitey.chromosome);
 
-    let mut output = File::create("lockdown_graph.txt").expect("create failed");
-    let header = format!("Nodes: {}, Edges: {}", alist.len(), elite_edj.len());
-    writeln!(output, "{}", header).expect("write failed");
-    for node in &elite_adj {
-        for n in node.iter() {
-            write!(output, "{} ", n)?;
+        let lgraph_name = format!("lockdown_graph{}.dat", i);
+        let mut output = File::create(lgraph_name).expect("create failed");
+        let header = format!("Nodes: {}, Edges: {}", alist.len(), elite_edj.len());
+        writeln!(output, "{}", header).expect("write failed");
+        for node in &elite_adj {
+            for n in node.iter() {
+                write!(output, "{} ", n)?;
+            }
+            writeln!(output, "")?;
         }
-        writeln!(output, "")?;
     }
+
     // let specs = GraphSpecs::multi_undirected();
     // let mut nodestmp: Vec<_> = (0..alist.len()).collect();
     // let mut nodes: Vec<Node<String, ()>> = vec![];
