@@ -378,7 +378,7 @@ impl Population {
         let mut plot = Plot::new();
         plot.add_trace(trace1);
         plot.add_trace(trace2);
-        plot.show_image(ImageFormat::PNG, 1280, 900);
+        // plot.show_image(ImageFormat::PNG, 1280, 900);
         let plot_name = format!("epi_plot{}.png", count);
         plot.write_image(plot_name, ImageFormat::PNG, 1280, 900, 1.0);
 
