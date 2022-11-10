@@ -1,4 +1,6 @@
-use inline_python::python;
+extern crate plotly;
+use plotly::common::Mode;
+use plotly::{Image, ImageFormat, Layout, Plot, Scatter};
 use rand::seq::SliceRandom;
 use rand::Rng;
 use rand::RngCore;
@@ -7,6 +9,7 @@ use std::env;
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::BufReader;
+use std::io::Write;
 
 #[derive(Debug)]
 struct Arguments {
@@ -362,33 +365,45 @@ impl Population {
         // }
         let x: Vec<usize> = (0..=max_len).collect();
         let mut x_lbls: Vec<_> = x.clone().iter().map(|x| x.to_string()).collect();
-        python! {
-            import matplotlib.pyplot as plt
-            import matplotlib.pyplot
-            print("testy1")
-            fig = matplotlib.pyplot.figure()
-            print("testy2")
-            fig.set_dpi(400)
-            fig.set_figheight(4)
-            plot = fig.add_subplot(111)
-            // for el in 'epi_logs:
-            //     if len(el) > 5:
-            //         plot.plot('x, el, linewidth=1, alpha=0.3, color="gray")
-            print("Test1")
-            plot.plot('x, 'avg, label="Average of Running")
-            plot.plot('x, 'avg_all, label="Average of All")
-            print("Test2")
-            fig.suptitle("Epidemic Profiles for 50 Epidemics")
-            plot.set_ylabel("Newly Infected Individuals")
-            plot.set_xlabel("Day \n DATA: Avg Infected: " + str('avg_total))
-            plot.set_xticks('x)
-            plot.set_xticklabels('x_lbls)
-            plot.legend()
-            fig.tight_layout()
-            // plot.imshow()
-            fig.savefig("test_epi_fig.png")
+        let trace1 = Scatter::new(x.clone(), avg_all)
+            .name("Avg_All")
+            .mode(Mode::Lines);
+        let trace2 = Scatter::new(x.clone(), avg)
+            .name("Avg_Running")
+            .mode(Mode::Lines);
+        let mut plot = Plot::new();
+        plot.add_trace(trace1);
+        plot.add_trace(trace2);
+        plot.show_image(ImageFormat::PNG, 1280, 900);
+        plot.write_image("plotplot.png", ImageFormat::PNG, 1280, 900, 1.0);
 
-        }
+        // python! {
+        //     import matplotlib.pyplot as plt
+        //     import matplotlib.pyplot
+        //     print("testy1")
+        //     fig = matplotlib.pyplot.figure()
+        //     print("testy2")
+        //     fig.set_dpi(400)
+        //     fig.set_figheight(4)
+        //     plot = fig.add_subplot(111)
+        //     // for el in 'epi_logs:
+        //     //     if len(el) > 5:
+        //     //         plot.plot('x, el, linewidth=1, alpha=0.3, color="gray")
+        //     print("Test1")
+        //     plot.plot('x, 'avg, label="Average of Running")
+        //     plot.plot('x, 'avg_all, label="Average of All")
+        //     print("Test2")
+        //     fig.suptitle("Epidemic Profiles for 50 Epidemics")
+        //     plot.set_ylabel("Newly Infected Individuals")
+        //     plot.set_xlabel("Day \n DATA: Avg Infected: " + str('avg_total))
+        //     plot.set_xticks('x)
+        //     plot.set_xticklabels('x_lbls)
+        //     plot.legend()
+        //     fig.tight_layout()
+        //     // plot.imshow()
+        //     fig.savefig("test_epi_fig.png")
+
+        // }
     }
 }
 
@@ -398,7 +413,7 @@ fn get_lockdown_graphs(
     remove_list: &[usize],
 ) -> (Vec<Vec<u32>>, Vec<(u32, u32)>) {
     let mut lock_adj: Vec<Vec<u32>> = adj_list.to_owned();
-    let lock_edg: Vec<(u32, u32)> = edg_list.to_owned();
+    let mut lock_edg: Vec<(u32, u32)> = edg_list.to_owned();
     let mut removeylist: Vec<usize> = vec![];
     for (idx, edge) in remove_list.iter().enumerate() {
         if *edge == 0 {
@@ -413,9 +428,9 @@ fn get_lockdown_graphs(
             removeylist.push(idx);
         }
     }
-    // for x in removeylist.iter().rev() {
-    //     lock_edg.remove(*x);
-    // }
+    for x in removeylist.iter().rev() {
+        lock_edg.remove(*x);
+    }
     (lock_adj, lock_edg)
 }
 
@@ -505,13 +520,15 @@ pub fn fitness_sirs(
                 0 => (),         //susceptible, do nothing
                 1 => clr[i] = 2, //infected, move to removed
                 // 2 => (),         //removed, move to susceptible
-                2 => clr[i] = 0, //removed, move to susceptible
+                2 => clr[i] = 4, //removed, move to removed2
                 3 => {
                     //newly infected
                     clr[i] = 1;
                     numb_inf += 1;
                     curr_epi.push(i);
                 }
+                4 => clr[i] = 5, //removed, move to susceptible
+                5 => clr[i] = 0, //removed, move to susceptible
                 _ => (),
             }
         }
@@ -522,7 +539,7 @@ pub fn fitness_sirs(
     (max, len, ttl, lockdown_step, reopen_step, epi_log)
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     static ALPHA: f64 = 0.3;
     let mut rng = rand::thread_rng();
     let args = parse_args();
@@ -532,7 +549,7 @@ fn main() {
     let (elist, alist) = parse_graph(f);
     let mut pop = Population::init_pop(
         0.7,
-        201,
+        101,
         &elist,
         &alist,
         args.cross_chance,
@@ -540,7 +557,7 @@ fn main() {
         args.p0,
     );
     pop.evolve(
-        100,
+        10,
         args.p0,
         ALPHA,
         alist.len(),
@@ -550,7 +567,38 @@ fn main() {
         &mut rng,
     );
     pop.run_epis(args.shut_percent, args.reopen_percent);
+    let (elite_adj, elite_edj) =
+        get_lockdown_graphs(&pop.adj_list, &pop.edg_list, &pop.elitey.chromosome);
 
+    let mut output = File::create("lockdown_graph.txt").expect("create failed");
+    let header = format!("Nodes: {}, Edges: {}", alist.len(), elite_edj.len());
+    writeln!(output, "{}", header).expect("write failed");
+    for node in &elite_adj {
+        for n in node.iter() {
+            write!(output, "{} ", n)?;
+        }
+        writeln!(output, "")?;
+    }
+    // let specs = GraphSpecs::multi_undirected();
+    // let mut nodestmp: Vec<_> = (0..alist.len()).collect();
+    // let mut nodes: Vec<Node<String, ()>> = vec![];
+    // for i in &nodestmp {
+    //     nodes.push(Node::from_name(i.to_string()));
+    // }
+    // let mut edges: Vec<Edge<String, ()>> = vec![];
+    // for i in &elite_edj {
+    //     edges.push(Edge::with_weight(i.0.to_string(), i.1.to_string(), 1.0));
+    // }
+    // let mut graph: Graph<String, ()> = Graph::new(specs);
+    // graph.add_nodes(nodes);
+    // // graph.add_edges(edges);
+    // for i in &elite_edj {
+    //     graph.add_edge_tuple(i.0.to_string(), i.1.to_string());
+    // }
+    // let new_graph = graph.to_single_edges().unwrap();
+
+    println!("cat");
+    Ok(())
     // println!("{:?}", pop.pop[4]);
     // println!("{:?}", alist);
     // println!("{:?}", elist);
