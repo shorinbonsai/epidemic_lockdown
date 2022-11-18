@@ -14,3 +14,37 @@
 ./epidemic_lockdown 512graphbest.dat 479 0.9 0.1 0.05 0.02 0.7
 ./epidemic_lockdown 512graphbest.dat 479 0.9 0.1 0.075 0.03 0.7
 ./epidemic_lockdown 512graphbest.dat 479 0.9 0.1 0.1 0.04 0.7
+
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.025 0.01 0.5
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.05 0.02 0.5
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.075 0.03 0.5
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.1 0.04 0.5
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.025 0.01 0.7
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.05 0.02 0.7
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.075 0.03 0.7
+./epidemic_lockdown 256graphbest2.dat 132 0.9 0.1 0.1 0.04 0.7
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.025 0.01 0.5
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.05 0.02 0.5
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.075 0.03 0.5
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.1 0.04 0.5
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.025 0.01 0.7
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.05 0.02 0.7
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.075 0.03 0.7
+./epidemic_lockdown 512graphbest2.dat 43 0.9 0.1 0.1 0.04 0.7
+
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.025 0.01 0.5
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.05 0.02 0.5
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.075 0.03 0.5
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.1 0.04 0.5
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.025 0.01 0.7
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.05 0.02 0.7
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.075 0.03 0.7
+./epidemic_lockdown 256graphbest3.dat 118 0.9 0.1 0.1 0.04 0.7
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.025 0.01 0.5
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.05 0.02 0.5
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.075 0.03 0.5
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.1 0.04 0.5
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.025 0.01 0.7
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.05 0.02 0.7
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.075 0.03 0.7
+./epidemic_lockdown 512graphbest3.dat 479 0.9 0.1 0.1 0.04 0.7
