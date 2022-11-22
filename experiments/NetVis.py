@@ -61,7 +61,7 @@ def edge_list(filename):
     return edge_lists, edge_counts
 
 
-def make_graph(el: list, ec: list, low_deg: list, high_deg: list, out_file: str, verts: int):
+def make_graph(el: list, ec: list, low_deg: list, high_deg: list, out_file: str, verts: int, p0: int):
     g = Graph(engine='sfdp')
     e_cout = 0
 
@@ -69,7 +69,7 @@ def make_graph(el: list, ec: list, low_deg: list, high_deg: list, out_file: str,
     g.node_attr.update(color='black', shape='point', width='0.02', height='0.02')
     g.edge_attr.update(color='black', penwidth='0.5')
     for n in range(verts):
-        if n == 0:
+        if n == p0:
             if n in low_deg:
                 g.node(str(n), label=str(n), color='red', width='0.03', height='0.03')
                 pass
@@ -125,6 +125,8 @@ def make_graph(el: list, ec: list, low_deg: list, high_deg: list, out_file: str,
 def main():
     # nodes = [256, 512, 768, 1024]
     # nodes = [256]
+    smallP0 = [212, 132, 118]
+    largeP0 = [479, 43, 479]
     for dirpath, dirnames, files in os.walk('.'):
         for file_name in files:
             if file_name.__contains__("lockdown_graph") and file_name.endswith(".dat"):
