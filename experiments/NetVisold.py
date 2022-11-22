@@ -67,7 +67,7 @@ def make_graph(el: list, ec: list, low_deg: list, high_deg: list, out_file: str,
     g.node_attr.update(color='black', shape='point', width='0.02', height='0.02')
     g.edge_attr.update(color='black', penwidth='0.5')
     for n in range(verts):
-        if n == 118:
+        if n == 479:
             if n in low_deg:
                 g.node(str(n), label=str(n), color='red', width='0.03', height='0.03')
                 pass
@@ -123,11 +123,11 @@ def make_graph(el: list, ec: list, low_deg: list, high_deg: list, out_file: str,
 def main():
     # nodes = [256, 512, 768, 1024]
     # nodes = [256]
-    finames = ["256graphbest3"]
+    finames = ["512graphbest3"]
     for fi in finames:
         el, ec = edge_list(fi + ".dat")
-        low_deg, high_deg = high_low_deg(el, 256)
-        make_graph(el, ec, low_deg, high_deg, fi, 256)
+        low_deg, high_deg = high_low_deg(el, 512)
+        make_graph(el, ec, low_deg, high_deg, fi, 512)
         print("done 1")
         pass
     print("DONE")
